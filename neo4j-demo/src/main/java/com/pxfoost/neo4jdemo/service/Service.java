@@ -21,34 +21,41 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Slf4j
 public class Service {
 
-    private static final String dbPath = "E:\\tmp\\test";
+    private static final String dbPath = "D:\\Temp\\neo4j\\instanceA";
     private DatabaseManagementService databaseManagementService;
     private GraphDatabaseService graphDb;
     final Label personLabel = Label.label( "Person" );
     final RelationshipType knows = RelationshipType.withName("KNOWS");
 
+    /**
+     * 不能使用shutdown过后内置实例的DatabaseLayout，shutdown的时候已经将实例的全部文件删除了
+     * @throws IOException
+     * @throws InterruptedException
+     */
     public void test() throws IOException, InterruptedException {
-        startEmbeddedNeo4jServer();
-        databaseManagementService.shutdown();
-        Thread.sleep(3000);
+//        startEmbeddedNeo4jServer();
+//        databaseManagementService.shutdown();
+//        Thread.sleep(3000);
+
         batchImport();
         startEmbeddedNeo4jServer();
     }
 
     private void startEmbeddedNeo4jServer() throws IOException, InterruptedException {
         databaseManagementService = new DatabaseManagementServiceBuilder(Paths.get(dbPath).toFile())
-                .setConfig(new BoltConnector().enabled, true)
+                .setConfig(GraphDatabaseSettings.neo4j_home, Paths.get(dbPath))
+                .setConfig(BoltConnector.enabled, true)
                 .build();
         graphDb = databaseManagementService.database("neo4j");
         registerShutdownHook( databaseManagementService );
         Thread.sleep(3000);
     }
 
-    private Config configuration(int denseNodeThreshold ){
+    private Config configuration(){
 
         return Config.newBuilder()
                 .set( GraphDatabaseSettings.neo4j_home, Paths.get(dbPath) )
-                .set( GraphDatabaseSettings.dense_node_threshold, denseNodeThreshold )
+                .set(BoltConnector.enabled, true)
                 .build();
     }
 
@@ -65,10 +72,9 @@ public class Service {
     }
 
     private void batchImport() throws IOException {
-        int denseNodeThreshold = GraphDatabaseSettings.dense_node_threshold.defaultValue();
-        DatabaseLayout tempStoreDir = ((GraphDatabaseAPI)graphDb).databaseLayout();
+        final DatabaseLayout tempStoreDir = DatabaseLayout.of(configuration());
         final FileSystemAbstraction fileSystem = new DefaultFileSystemAbstraction();
-        try(final BatchInserter batchInserter = BatchInserters.inserter(tempStoreDir, fileSystem, configuration(denseNodeThreshold))){
+        try(final BatchInserter batchInserter = BatchInserters.inserter(tempStoreDir, fileSystem)){
             batchInserter.createDeferredSchemaIndex(personLabel).on("name").create();
             final ArrayList<Long> nodeIds = new ArrayList<>();
             //没有索引，通过Neo4j Desktop打开左侧没有 Node Labels和Relationship Types，有索引的情况下，count为0
